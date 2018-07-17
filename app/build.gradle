@@ -9,22 +9,64 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        ndk {
+            abiFilters "armeabi-v7a", "x86"
+        }
     }
     buildTypes {
         release {
+            crunchPngs true
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
 
         debug {
+            crunchPngs true
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     productFlavors {
     }
+
+    splits {
+        // Configures multiple APKs based on ABI.
+        abi {
+            // Enables building multiple APKs.
+            enable false
+            // By default all ABIs are included, so use reset() and include to specify that we only
+            // want APKs for x86, armeabi-v7a, and mips.
+            reset()
+            // Specifies a list of ABIs that Gradle should create APKs for.
+            include "x86", "armeabi-v7a"
+            // Specify that we want to also generate a universal APK that includes all ABIs.
+            universalApk true
+        }
+
+        // Configures multiple APKs based on screen density.
+        density {
+            // Enables building multiple APKs.
+            enable false
+            // Alternatively, you can use the following to clear the default list of
+            // screen densities and specify only the screen densities you want to build
+            // APKs for:
+            reset()
+            include "ldpi", "hdpi", "xxxhdpi"
+            // Specifies a list of compatible screen size settings. This property
+            // configures the <compatible-screens> element in the manifest. You
+            // typically don't need to configure this manifest property, but it's
+            // important when building multiple APKs based on screen density.
+            compatibleScreens 'small', 'normal', 'large'
+        }
+
+    }
+
+    aaptOptions {
+        cruncherEnabled true
+    }
+
 }
 
 dependencies {
@@ -38,5 +80,43 @@ dependencies {
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
     implementation 'com.github.alxrm:audiowave-progressbar:0.9.2'
     implementation 'com.facebook.fresco:fresco:1.9.0'
-    implementation 'com.github.sera5-dev:basslib-android:2.0'
+    implementation 'com.github.sera5-dev:basslib-android:2.35'
+}
+
+// Map for the version code that gives each ABI a value.
+ext.abiCodes = ['armeabi-v7a':1, mips:2, x86:3]
+
+// For per-density APKs, create a similar map like this:
+// ext.densityCodes = ['hdpi': 1, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4]
+
+import com.android.build.OutputFile
+
+// For each APK output variant, override versionCode with a combination of
+// ext.abiCodes * 1000 + variant.versionCode. In this example, variant.versionCode
+// is equal to defaultConfig.versionCode. If you configure product flavors that
+// define their own versionCode, variant.versionCode uses that value instead.
+android.applicationVariants.all { variant ->
+
+    // Assigns a different version code for each output APK
+    // other than the universal APK.
+    variant.outputs.each { output ->
+
+        // Stores the value of ext.abiCodes that is associated with the ABI for this variant.
+        def baseAbiVersionCode =
+                // Determines the ABI for this variant and returns the mapped value.
+                project.ext.abiCodes.get(output.getFilter(OutputFile.ABI))
+
+        // Because abiCodes.get() returns null for ABIs that are not mapped by ext.abiCodes,
+        // the following code does not override the version code for universal APKs.
+        // However, because we want universal APKs to have the lowest version code,
+        // this outcome is desirable.
+        if (baseAbiVersionCode != null) {
+
+            // Assigns the new version code to versionCodeOverride, which changes the version code
+            // for only the output APK, not for the variant itself. Skipping this step simply
+            // causes Gradle to use the value of variant.versionCode for the APK.
+            output.versionCodeOverride =
+                    baseAbiVersionCode * 1000 + variant.versionCode
+        }
+    }
 }
